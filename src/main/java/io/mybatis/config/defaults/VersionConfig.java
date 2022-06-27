@@ -18,20 +18,24 @@ package io.mybatis.config.defaults;
 
 import io.mybatis.config.Config;
 import io.mybatis.config.ConfigHelper;
-import io.mybatis.config.util.ResourceUtil;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.JarURLConnection;
 import java.net.URL;
-import java.util.Arrays;
-import java.util.Comparator;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * 形如 mybais-provider-v1.0.properties 带版本号的属性配置文件
@@ -77,7 +81,7 @@ public abstract class VersionConfig implements Config {
    * 获取版本配置文件所在路径
    */
   protected String getConfigPath() {
-    return getClass().getPackage().getName().replaceAll("\\.", "/");
+    return getClass().getPackage().getName().replaceAll("\\.", "/") + "/";
   }
 
   /**
@@ -102,75 +106,130 @@ public abstract class VersionConfig implements Config {
   }
 
   /**
-   * 获取所有版本配置文件
+   * 选择版本
+   *
+   * @param versions 所有版本
+   * @param version  选择的版本
    */
-  protected File[] getConfigFiles() {
-    String configName = getConfigName();
-    String configPath = getConfigPath();
-
-    ClassLoader cl = ResourceUtil.getDefaultClassLoader();
-    URL resource = cl != null ? cl.getResource(configPath) : ClassLoader.getSystemResource(configPath);
-    if (resource == null) {
+  private String chooseVersion(List<String> versions, String version) {
+    if (versions == null || versions.isEmpty()) {
       return null;
     }
-    //TODO 测试 jar 包中是否正常
-    return new File(resource.getPath()).listFiles((dir, name) -> name.startsWith(configName));
+    Collections.sort(versions);
+    if (version == null || version.isEmpty()) {
+      return versions.get(versions.size() - 1);
+    }
+    ConfigVersion configVersion = new ConfigVersion(version);
+    Pattern pattern = Pattern.compile(getConfigName() + "-(v\\d+\\.\\d+)\\" + FILE_TYPE);
+    for (String ver : versions) {
+      Matcher matcher = pattern.matcher(ver);
+      if (matcher.find()) {
+        String v = matcher.group(1);
+        if (configVersion.compareTo(new ConfigVersion(v)) >= 0) {
+          return ver;
+        }
+      }
+    }
+    return versions.get(0);
   }
 
   /**
-   * 获取选择的配置文件
-   *
-   * @param files   可选配置文件
-   * @param version 选择的版本号
+   * 选择版本
    */
-  protected File chooseConfig(File[] files, String version) {
+  private InputStream chooseFile(JarFile jarFile, String version) throws IOException {
+    String configName = getConfigName();
+    String configPath = getConfigPath();
+    Enumeration<JarEntry> entries = jarFile.entries();
+    Map<String, JarEntry> entryMap = new HashMap<>();
+    while (entries.hasMoreElements()) {
+      JarEntry entry = entries.nextElement();
+      String name = entry.getName();
+      if (name.startsWith(configPath)) {
+        // 正则匹配，提取版本号和文件内容
+        name = name.substring(configPath.length());
+        if (name.startsWith(configName)) {
+          entryMap.put(name, entry);
+        }
+      }
+    }
+    String chooseVersion = chooseVersion(new ArrayList<>(entryMap.keySet()), version);
+    if (chooseVersion == null) {
+      return null;
+    }
+    JarEntry jarEntry = entryMap.get(chooseVersion);
+    return jarFile.getInputStream(jarEntry);
+  }
+
+  /**
+   * 选择版本
+   */
+  private InputStream chooseFile(File file, String version) throws IOException {
+    String configName = getConfigName();
+    File[] files = file.listFiles();
     if (files == null || files.length == 0) {
       return null;
     }
-    List<File> list = Arrays.stream(files).sorted(Comparator.comparing(File::getName).reversed()).collect(Collectors.toList());
-    File file = null;
-    if (version == null || version.isEmpty()) {
-      file = list.get(0);
-    } else {
-      String configName = getConfigName();
-      Pattern pattern = Pattern.compile(configName + "-(v\\d+\\.\\d+)\\" + FILE_TYPE);
-      ConfigVersion chooseConfigVersion = new ConfigVersion(version);
-      for (File f : list) {
-        String name = f.getName();
-        Matcher matcher = pattern.matcher(name);
-        if (matcher.find()) {
-          String v = matcher.group(1);
-          if (chooseConfigVersion.compareTo(new ConfigVersion(v)) >= 0) {
-            file = f;
-            break;
-          }
-        }
-      }
-      if (file == null) {
-        file = list.get(list.size() - 1);
+    Map<String, File> fileMap = new HashMap<>();
+    for (File f : files) {
+      if (f.getName().startsWith(configName)) {
+        fileMap.put(f.getName(), f);
       }
     }
-    return file;
+    String chooseVersion = chooseVersion(new ArrayList<>(fileMap.keySet()), version);
+    if (chooseVersion == null) {
+      return null;
+    }
+    return new FileInputStream(fileMap.get(chooseVersion));
   }
 
   /**
    * 获取版本配置
    */
   protected Properties getVersionProperties() {
-    //所有版本的配置文件
-    File[] files = getConfigFiles();
-    //指定的版本
     String version = ConfigHelper.getStr(getVersionKey());
-    //选择指定版本的配置文件
-    File file = chooseConfig(files, version);
-    if (file == null) {
+    // 读取资源
+    URL resource = getClass().getResource("");
+    if (resource == null) {
+      return null;
+    }
+    InputStream inputStream = null;
+    if (resource.getProtocol().equals("file")) {
+      if (resource.getPath().endsWith(".jar")) {
+        try {
+          JarFile jarFile = new JarFile(resource.getPath());
+          inputStream = chooseFile(jarFile, version);
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+      } else {
+        try {
+          File file = new File(resource.toURI());
+          inputStream = chooseFile(file, version);
+        } catch (Exception e) {
+          throw new RuntimeException(e);
+        }
+      }
+    } else if (resource.getProtocol().equals("jar")) {
+      try {
+        JarFile jarFile = ((JarURLConnection) resource.openConnection()).getJarFile();
+        inputStream = chooseFile(jarFile, version);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+    if (inputStream == null) {
       return null;
     }
     Properties props = new Properties();
-    try (InputStream is = new FileInputStream(file)) {
-      props.load(is);
+    try {
+      props.load(inputStream);
     } catch (IOException e) {
-      throw new RuntimeException("file: " + file + " not exists", e);
+      throw new RuntimeException(e);
+    } finally {
+      try {
+        inputStream.close();
+      } catch (IOException ignored) {
+      }
     }
     return props;
   }

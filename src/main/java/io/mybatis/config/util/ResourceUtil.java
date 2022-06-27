@@ -18,10 +18,13 @@ package io.mybatis.config.util;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.util.Enumeration;
+import java.util.Objects;
 
 public class ResourceUtil {
   public static final String CLASSPATH_PREFIX = "classpath:";
@@ -44,7 +47,19 @@ public class ResourceUtil {
         }
       }
     }
-    return cl;
+    return Objects.requireNonNull(cl);
+  }
+
+  public static URL getResource(String name) {
+    return getDefaultClassLoader().getResource(name);
+  }
+
+  public static Enumeration<URL> getResources(String name) {
+    try {
+      return getDefaultClassLoader().getResources(name);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   public static File getClasspathFile(String resourceLocation) throws FileNotFoundException {
@@ -61,8 +76,7 @@ public class ResourceUtil {
     if (resourceLocation.startsWith(CLASSPATH_PREFIX)) {
       String path = resourceLocation.substring(CLASSPATH_PREFIX.length());
       String description = "class path resource [" + path + "]";
-      ClassLoader cl = getDefaultClassLoader();
-      URL url = (cl != null ? cl.getResource(path) : ClassLoader.getSystemResource(path));
+      URL url = getResource(path);
       if (url == null) {
         throw new FileNotFoundException(description +
             " cannot be resolved to absolute file path because it does not exist");
