@@ -33,7 +33,7 @@ public class CustomTest {
     property = config.getStr("config-test.name");
     desc = config.getStr("desc");
     Assert.assertEquals("v1.0", property);
-    Assert.assertNull(desc);
+    Assert.assertEquals("测试代码", desc);
     System.clearProperty("config-test.version");
   }
 

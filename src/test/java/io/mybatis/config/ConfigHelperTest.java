@@ -37,7 +37,7 @@ public class ConfigHelperTest {
     ConfigHelper.reload();
 
     Assert.assertEquals("custom", ConfigHelper.getStr(name));
-    Assert.assertNull(ConfigHelper.getStr("desc"));
+    Assert.assertEquals("测试代码", ConfigHelper.getStr("desc"));
 
     System.clearProperty("config-test.properties");
     System.clearProperty("config-test.version");
