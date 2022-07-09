@@ -10,13 +10,17 @@ import org.springframework.core.env.Environment;
  */
 public class SpringEnvUtil implements EnvironmentAware {
   private static Environment environment;
+  private static boolean enabled;
 
   @Override
   public void setEnvironment(Environment environment) {
     SpringEnvUtil.environment = environment;
+    // 可以通过属性配置是否启用 Spring 支持，默认支持
+    SpringEnvUtil.enabled = environment.getProperty("io.mybatis.config.spring.enabled",
+            Boolean.class, true);
   }
 
   public static String getStr(String key) {
-    return environment != null ? SpringEnvUtil.environment.getProperty(key) : null;
+    return (environment != null && enabled) ? SpringEnvUtil.environment.getProperty(key) : null;
   }
 }

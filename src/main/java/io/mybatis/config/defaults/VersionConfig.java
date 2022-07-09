@@ -169,8 +169,8 @@ public abstract class VersionConfig implements Config {
     prop = new Properties(prop);
     is = toInputStream.apply(chooseVersion);
     if (is != null) {
-      is.close();
       prop.load(is);
+      is.close();
     }
     return prop;
   }
