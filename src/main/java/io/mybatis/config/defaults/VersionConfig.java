@@ -286,8 +286,8 @@ public abstract class VersionConfig implements Config {
    * 版本比对
    */
   public static class ConfigVersion implements Comparable<ConfigVersion> {
-    private final int x;
-    private final int y;
+    private final int    x;
+    private final int    y;
     private final String fileName;
 
     public ConfigVersion(String version) {
