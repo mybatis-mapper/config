@@ -18,10 +18,16 @@ package io.mybatis.config.defaults;
 
 import io.mybatis.config.Config;
 import io.mybatis.config.ConfigHelper;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.core.io.support.ResourcePatternResolver;
 
 import java.io.*;
 import java.net.JarURLConnection;
+import java.net.URI;
 import java.net.URL;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.function.Function;
 import java.util.jar.JarEntry;
@@ -231,6 +237,42 @@ public abstract class VersionConfig implements Config {
   }
 
   /**
+   * 选择版本
+   */
+  private Properties chooseFromResource(String version) throws IOException {
+
+    Map<String, URI> fileMap = new HashMap<>();
+
+    ResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
+    Resource[] resources = resolver.getResources("classpath*:io/mybatis/provider/config/*.properties");
+    for (Resource resource : resources) {
+      URI uri = resource.getURI();
+
+      String urlString = uri.toString();
+      if (urlString.endsWith(FILE_TYPE)) {
+        Path path = Paths.get(uri);
+        // 获取文件名
+        Path fileName = path.getFileName();
+        fileMap.put(fileName.toString(), uri);
+      }
+    }
+
+    List<ConfigVersion> versions = sortVersions(new ArrayList<>(fileMap.keySet()));
+    ConfigVersion chooseVersion = chooseVersion(versions, version);
+
+    return build(versions, chooseVersion, configVersion -> {
+      URI url = fileMap.get(chooseVersion.getFileName());
+      InputStream inputStream = null;
+      try {
+        inputStream = url.toURL().openStream();
+      } catch (IOException e) {
+        return null;
+      }
+      return inputStream;
+    });
+  }
+
+  /**
    * 获取版本配置
    */
   protected Properties buildVersionProperties() {
@@ -261,6 +303,12 @@ public abstract class VersionConfig implements Config {
         JarFile jarFile = ((JarURLConnection) resource.openConnection()).getJarFile();
         return chooseFromJarFile(jarFile, version);
       } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    } else if (resource.getProtocol().equals("resource")) {
+      try {
+        return chooseFromResource(version);
+      } catch (Exception e) {
         throw new RuntimeException(e);
       }
     }
