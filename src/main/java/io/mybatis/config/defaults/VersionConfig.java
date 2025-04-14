@@ -18,16 +18,12 @@ package io.mybatis.config.defaults;
 
 import io.mybatis.config.Config;
 import io.mybatis.config.ConfigHelper;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
-import org.springframework.core.io.support.ResourcePatternResolver;
+import io.mybatis.config.spring.SpringEnvUtil;
 
 import java.io.*;
 import java.net.JarURLConnection;
 import java.net.URI;
 import java.net.URL;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.function.Function;
 import java.util.jar.JarEntry;
@@ -241,21 +237,7 @@ public abstract class VersionConfig implements Config {
    */
   private Properties chooseFromResource(String version) throws IOException {
 
-    Map<String, URI> fileMap = new HashMap<>();
-
-    ResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
-    Resource[] resources = resolver.getResources("classpath*:io/mybatis/provider/config/*.properties");
-    for (Resource resource : resources) {
-      URI uri = resource.getURI();
-
-      String urlString = uri.toString();
-      if (urlString.endsWith(FILE_TYPE)) {
-        Path path = Paths.get(uri);
-        // 获取文件名
-        Path fileName = path.getFileName();
-        fileMap.put(fileName.toString(), uri);
-      }
-    }
+    Map<String, URI> fileMap = SpringEnvUtil.getResource();
 
     List<ConfigVersion> versions = sortVersions(new ArrayList<>(fileMap.keySet()));
     ConfigVersion chooseVersion = chooseVersion(versions, version);
@@ -271,6 +253,7 @@ public abstract class VersionConfig implements Config {
       return inputStream;
     });
   }
+
 
   /**
    * 获取版本配置
